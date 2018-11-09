@@ -1,0 +1,187 @@
+<!-- Emotion Classifier in <200 lines of code! -->
+<!DOCTYPE html>
+<html>
+<!-- HEAD: Import TensorFlow.js -->
+<head>
+  <meta charset="utf-8"/>
+	<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@0.13.3/dist/tf.min.js"></script>
+</head>
+<!-- BODY: Get webcam media, and classify the user emtoion using the TF.js model -->
+<body onload="init();">
+  <h1>Track the User's emotion</h1>
+	<h1 id='result_placeholder' style="color:blue;"></h1>
+	<p>
+		<button onclick="startWebcam();">Enable Webcam</button>
+		<button onclick="snapshot();">Start Classification</button> 
+	</p>
+	<video width=480 height=480 id="video" autoplay style="display: show;"></video>
+	<canvas id="myCanvas" width="360" height="360" style="display: none;"></canvas>  
+</body>
+<script>
+//--------------------
+// GET USER MEDIA
+//--------------------
+navigator.getUserMedia = (navigator.getUserMedia ||
+						  navigator.webkitGetUserMedia ||
+						  navigator.mozGetUserMedia ||
+						  navigator.msGetUserMedia);
+
+var video;
+var webcamStream;
+
+function startWebcam() {
+	if (navigator.getUserMedia) {
+		navigator.getUserMedia (
+
+      // constraints
+      {
+      	video: true,
+      	audio: false
+      },
+
+      // successCallback
+      function(localMediaStream) {
+      	video = document.querySelector('video');
+      	// video.src = window.URL.createObjectURL(localMediaStream); is no longer supported in Firefox
+        video.srcObject = localMediaStream;
+      	webcamStream = localMediaStream;
+      },
+
+      // errorCallback
+      function(err) {
+      	console.log("The following error occurred: " + err);
+      }
+      );
+	} else {
+		console.log("getUserMedia not supported");
+	}  
+}
+//---------------------
+// TAKE A SNAPSHOT CODE
+//---------------------
+var canvas, ctx;
+
+function init() {
+// Get the canvas and obtain a context for
+// drawing in it
+canvas = document.getElementById("myCanvas");
+ctx = canvas.getContext('2d');
+}
+
+function sleep(ms) {
+	return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function snapshot() {
+  	// iterate indefinitely
+  	while (true) {
+      // Draws current image from the video element into the canvas
+      ctx.drawImage(video, 0,0, canvas.width, canvas.height);
+
+      // Forward the data from the canvas into a snapshot image (should work with Canvas element, but did not in my implementation)
+      dataUrl = canvas.toDataURL();
+      imageElement = document.createElement('img');
+      imageElement.setAttribute("id", "snapshot");
+      imageElement.src = dataUrl;
+
+  		// Style your image here
+  		imageElement.style.width = '48px';
+  		imageElement.style.height = '48px';
+  		imageElement.style.display = "none";
+
+  		// After you are done styling it, append it to the BODY element
+  		document.body.appendChild(imageElement);
+
+  		EmotionClfDemo();
+  		await sleep(1000)
+	}
+
+}
+
+</script>
+<script>
+
+const IMAGE_SIZE = 48;
+
+let EmotionClf;
+const EmotionClfDemo = async () => {
+
+  // Load the model – warning: use Firefox, as Chrome has issues with local files
+  EmotionClf = await tf.loadModel('/Users/simonplovyt/stack/Projects/TensorFlow.js/emotion_recognition/static/fer2013_tensorflowjs/model.json');
+
+  // Extract the snapshot
+  const snapshotElement = document.getElementById('snapshot');
+
+  // Predict the snapshot
+  predict(snapshotElement);
+
+  // Remove the snapshot
+  imageElement.parentNode.removeChild(imageElement);
+};
+
+
+// The function to classify the image
+ async function predict(imgElement) {
+  // Save the top K classes
+ 	const topK = 3;
+
+  // Predict the class probabilities
+ 	const probabilities = tf.tidy(() => {
+    // tf.fromPixels() returns a Tensor from an image element.
+    const img = tf.fromPixels(imgElement).toFloat();
+
+    // grayscale = tensorflow.js doesnt have this implemented yet
+    rgb_weights = [0.2989, 0.5870, 0.1140]
+    const R = img.slice([0,0,0], [48, 48, 1]);
+    const G = img.slice([0,0,1], [48, 48, 1]);
+    const B = img.slice([0,0,2], [48, 48, 1]);
+
+    const R_w = tf.mul(R, tf.scalar(rgb_weights[0]));
+    const G_w = tf.mul(G, tf.scalar(rgb_weights[1]));
+    const B_w = tf.mul(B, tf.scalar(rgb_weights[2]));
+
+  	const grayscale_image = (R_w.add(G_w).add(B_w));
+  	
+
+    // Normalize the image from [0, 255] to [-1, 1].
+    const offset = tf.scalar(127.5);
+    const normalized = grayscale_image.sub(offset).div(offset);
+
+    const final_image = normalized.expandDims(0)
+
+    // Ideally, we would want to segment the image first and crop the face out. However, the segmentation model was not readily convertable to a TF.js model, so for this tutorial this was left out.
+
+    // Make a prediction using EmotionClf.
+    return EmotionClf.predict(final_image);
+    });
+
+  // Extract the predicted probabilities
+ 	const values = await probabilities.data();  
+
+  // Sort the probabilities
+ 	const valuesAndIndices = [];
+ 	for (let i = 0; i < values.length; i++) {
+ 		valuesAndIndices.push({value: values[i], index: i});
+ 	}
+ 	valuesAndIndices.sort((a, b) => {
+ 		return b.value - a.value;
+ 	});
+
+  // Extract the best K classes and their probabilities
+ 	const topkValues = new Float32Array(topK);
+ 	const topkIndices = new Int32Array(topK);
+ 	for (let i = 0; i < topK; i++) {
+ 		topkValues[i] = valuesAndIndices[i].value;
+ 		topkIndices[i] = valuesAndIndices[i].index;
+ 	}
+
+  // Attach the label to the best class
+ 	const labels = {0: 'angry', 1: 'disgust', 2: 'fear', 3: 'happy', 4: 'sad', 5: 'surprise', 6: 'neutral'};
+ 	const predicted_label = labels[topkIndices[0]]
+
+  // Output
+  console.log(predicted_label)
+ 	document.getElementById("result_placeholder").innerHTML = predicted_label
+ }
+</script>
+</html>
