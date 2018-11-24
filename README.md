@@ -1,3 +1,3 @@
 # Tutorials
 
-This repository contains the code, apps, and other material I use for my educational content.
+This repository contains the code, apps, and other material I create for educational purposes.
