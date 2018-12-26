@@ -1,3 +1,3 @@
 # TensorFlow.js emotion classifier
 
-An emotion classifier in the webbrowser using TensorFlow in JavaScript.
+A quick example of an emotion classifier in the browser using TensorFlow in JavaScript.
